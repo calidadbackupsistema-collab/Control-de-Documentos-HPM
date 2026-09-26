@@ -1,0 +1,1493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HPM · Control de Documentos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Firebase (compat build: funciona con un script normal, sin bundler) -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    /* Paleta oficial HPM (tomada del Dashboard Integral HPM / Sistema PQCD) */
+    --navy:#0B2D50;
+    --navy-2:#123E69;
+    --blue:#0E75BC;
+    --cyan:#42C6FF;
+    --blue-light:#E9F3FB;
+    --bg:#EAF1F7;
+    --surface:#FFFFFF;
+    --ink:#10263B;
+    --muted:#5A6C7E;
+    --line:#D7E1EB;
+    --ok:#16834E;      --ok-bg:#E8F6EF;
+    --warn:#C87F0A;    --warn-bg:#FCF3E3;
+    --danger:#D7263D;  --danger-bg:#FDECEE;
+    --draft:#5B4B9B;   --draft-bg:#EFEAFB;
+    --mono:'IBM Plex Mono',monospace;
+    --sans:'IBM Plex Sans',sans-serif;
+    --radius:6px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;color:var(--ink);font-family:var(--sans);font-size:14px;min-height:100vh;}
+  body{
+    background:
+      radial-gradient(circle at 8% 3%,rgba(66,198,255,.16),transparent 27rem),
+      radial-gradient(circle at 96% 12%,rgba(14,117,188,.13),transparent 30rem),
+      linear-gradient(145deg,#f7fafc 0%,#eaf1f7 52%,#dce8f2 100%);
+    background-attachment:fixed;
+  }
+  h1,h2,h3{font-family:var(--sans);font-weight:600;margin:0;}
+  code,.mono,.codigo{font-family:var(--mono);}
+  button{font-family:var(--sans);cursor:pointer;}
+  a{color:var(--blue);}
+
+  /* HEADER — identidad visual HPM (logo real + degradado navy/azul con vidrio esmerilado) */
+  .hero-hpm{
+    width:min(1280px,calc(100% - 32px)); margin:18px auto 0; padding:18px 24px;
+    border-radius:18px; border:1px solid rgba(255,255,255,.2); border-bottom:4px solid var(--cyan);
+    background:linear-gradient(118deg,rgba(7,35,62,.98),rgba(11,63,105,.95) 62%,rgba(14,117,188,.9));
+    box-shadow:0 18px 48px rgba(5,35,61,.22); backdrop-filter:blur(12px);
+  }
+  .hero-inner{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;}
+  .dashboard-brand{display:flex;align-items:center;gap:16px;min-width:0;}
+  .dashboard-brand .logo-box{
+    width:150px; min-width:150px; height:58px; padding:9px 13px; border-radius:12px;
+    background:#fff; display:flex;align-items:center;justify-content:center;
+    box-shadow:0 7px 20px rgba(0,0,0,.22);
+  }
+  .dashboard-brand .logo-box img{display:block;max-width:100%;max-height:100%;object-fit:contain;}
+  .brand-copy{min-width:0;}
+  .brand-eyebrow{font-size:10px;font-weight:700;letter-spacing:.14em;color:#8EDCFF;text-transform:uppercase;margin-bottom:4px;}
+  .hero-hpm .brand-copy h1{font-size:clamp(18px,2.3vw,24px);font-weight:700;letter-spacing:-.01em;color:#fff;}
+  .brand-subtitle{margin-top:4px;color:#D5E8F7;font-size:12px;}
+  .hero-status{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+  .folio-pill{
+    font-family:var(--mono); font-size:11px; color:#D4E7F5; text-align:right;
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.13);
+    padding:6px 10px; border-radius:8px;
+  }
+  .cloud-status{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 12px;border-radius:20px;font-size:11.5px;font-weight:700;color:#fff;white-space:nowrap;}
+  .cloud-status .dot{width:8px;height:8px;border-radius:50%;background:#B9C4DE;flex-shrink:0;}
+  .cloud-status.ok .dot{background:#4CE0A0;box-shadow:0 0 6px #4CE0A0;}
+  .cloud-status.warn .dot{background:#F0C24B;box-shadow:0 0 6px #F0C24B;}
+  .cloud-status.ng .dot{background:#FF8A80;box-shadow:0 0 6px #FF8A80;}
+  .cloud-status.off .dot{background:#B9C4DE;}
+
+  /* TABS */
+  nav.tabs{
+    display:flex; gap:4px; background:rgba(255,255,255,.86); backdrop-filter:blur(10px); padding:8px 24px 0 24px;
+    border-bottom:1px solid var(--line); overflow-x:auto; position:sticky; top:0; z-index:20;
+    box-shadow:0 2px 12px rgba(11,45,80,.06);
+  }
+  nav.tabs button{
+    background:none; border:none; padding:10px 16px; font-size:13.5px; font-weight:500;
+    color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap;
+  }
+  nav.tabs button.active{color:var(--navy); border-bottom-color:var(--blue); font-weight:600;}
+  nav.tabs button:hover{color:var(--navy);}
+  nav.tabs .badge-count{
+    display:inline-block; margin-left:6px; background:var(--danger-bg); color:var(--danger);
+    border-radius:10px; padding:1px 7px; font-size:11px; font-weight:600;
+  }
+
+  main{max-width:1280px; margin:0 auto; padding:22px 24px 60px 24px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* CARDS / KPIs */
+  .kpi-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:22px;}
+  .kpi{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; border-top:3px solid var(--blue);
+  }
+  .kpi .num{font-size:26px; font-weight:700; color:var(--navy); font-family:var(--mono);}
+  .kpi .lbl{font-size:12px; color:var(--muted); margin-top:2px;}
+  .kpi.warn{border-top-color:var(--warn);} .kpi.warn .num{color:var(--warn);}
+  .kpi.danger{border-top-color:var(--danger);} .kpi.danger .num{color:var(--danger);}
+  .kpi.ok{border-top-color:var(--ok);} .kpi.ok .num{color:var(--ok);}
+  .kpi.draft{border-top-color:var(--draft);} .kpi.draft .num{color:var(--draft);}
+
+  section.panel{
+    background:rgba(255,255,255,.92); backdrop-filter:blur(8px); border:1px solid var(--line); border-radius:12px;
+    padding:18px 20px; margin-bottom:20px; box-shadow:0 10px 26px rgba(11,45,80,.06);
+  }
+  section.panel h2{font-size:15px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;}
+  section.panel h2 .hint{font-size:12px; font-weight:400; color:var(--muted);}
+
+  /* TABLES */
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{
+    text-align:left; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;
+    font-weight:600; padding:8px 10px; border-bottom:2px solid var(--line); white-space:nowrap;
+  }
+  td{padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tr:hover td{background:var(--blue-light);}
+  .empty-row td{color:var(--muted); text-align:center; padding:28px; font-style:italic;}
+
+  .badge{display:inline-block; padding:2px 9px; border-radius:12px; font-size:11.5px; font-weight:600;}
+  .badge.ok{background:var(--ok-bg); color:var(--ok);}
+  .badge.warn{background:var(--warn-bg); color:var(--warn);}
+  .badge.danger{background:var(--danger-bg); color:var(--danger);}
+  .badge.draft{background:var(--draft-bg); color:var(--draft);}
+  .badge.neutral{background:#EEF1F5; color:var(--muted);}
+
+  .btn{
+    border:1px solid var(--line); background:#fff; border-radius:5px; padding:6px 12px;
+    font-size:12.5px; font-weight:500; color:var(--ink);
+  }
+  .btn:hover{border-color:var(--blue); color:var(--blue);}
+  .btn.primary{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .btn.primary:hover{background:var(--navy-2);}
+  .btn.danger{color:var(--danger); border-color:var(--danger-bg);}
+  .btn.danger:hover{background:var(--danger-bg);}
+  .btn.small{padding:4px 9px; font-size:11.5px;}
+  .btn-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+
+  /* FORMS */
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px 18px;}
+  .form-grid .full{grid-column:1/-1;}
+  label{display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:5px;}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:5px;
+    font-size:13.5px; font-family:var(--sans); background:#fff; color:var(--ink);
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue);}
+  textarea{resize:vertical; min-height:60px;}
+  .field-note{font-size:11.5px; color:var(--muted); margin-top:4px;}
+  .codigo-preview{
+    font-family:var(--mono); font-size:15px; font-weight:600; color:var(--navy);
+    background:var(--blue-light); padding:8px 12px; border-radius:5px; border:1px dashed var(--blue);
+    display:inline-block; margin-top:4px;
+  }
+  .checkbox-line{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:400; color:var(--ink);}
+  .checkbox-line input{width:auto;}
+  fieldset{border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin:0;}
+  legend{font-size:12px; font-weight:600; color:var(--muted); padding:0 6px;}
+  .radio-opt{display:flex; align-items:flex-start; gap:8px; padding:6px 0; font-size:13px;}
+  .radio-opt input{margin-top:3px; width:auto;}
+  .radio-opt strong{display:block;}
+  .radio-opt span.d{color:var(--muted); font-size:12px;}
+
+  .filters{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;}
+  .filters input,.filters select{width:auto; min-width:140px;}
+
+  .info-box{
+    background:var(--blue-light); border:1px solid #CBDDF5; border-radius:6px; padding:12px 14px;
+    font-size:12.5px; color:var(--navy-2); line-height:1.5;
+  }
+  .warn-box{background:var(--warn-bg); border:1px solid #F0D8A8; color:#7A5106; border-radius:6px; padding:12px 14px; font-size:12.5px; line-height:1.5;}
+
+  /* MODAL */
+  .overlay{
+    display:none; position:fixed; inset:0; background:rgba(11,37,69,.55); z-index:100;
+    align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  .overlay.active{display:flex;}
+  .modal{
+    background:#fff; border-radius:8px; max-width:640px; width:100%; padding:22px 24px 24px 24px;
+    box-shadow:0 12px 40px rgba(0,0,0,.25);
+  }
+  .modal h2{font-size:16px; margin-bottom:4px;}
+  .modal .modal-sub{font-size:12.5px; color:var(--muted); margin-bottom:16px;}
+  .modal-close{float:right; background:none; border:none; font-size:20px; color:var(--muted); line-height:1;}
+
+  .hist-list{list-style:none; margin:0; padding:0;}
+  .hist-list li{border-left:3px solid var(--line); padding:6px 0 6px 12px; margin-bottom:4px; font-size:12.5px;}
+  .hist-list li .rev-tag{font-family:var(--mono); font-weight:700; color:var(--navy);}
+  .hist-list li .rev-date{color:var(--muted); margin-left:6px;}
+
+  .toast{
+    position:fixed; bottom:20px; right:20px; background:var(--navy); color:#fff; padding:11px 18px;
+    border-radius:6px; font-size:13px; z-index:200; box-shadow:0 6px 20px rgba(0,0,0,.25);
+    display:none;
+  }
+  .toast.show{display:block; animation:fadeout 3s forwards;}
+  @keyframes fadeout{0%{opacity:1;}80%{opacity:1;}100%{opacity:0;}}
+
+  .two-col{display:grid; grid-template-columns:1.1fr .9fr; gap:20px;}
+  @media(max-width:900px){.two-col{grid-template-columns:1fr;} .form-grid{grid-template-columns:1fr;}}
+
+  .subtle-table th, .subtle-table td{font-size:12px;}
+  .tag-list{display:flex; flex-wrap:wrap; gap:6px;}
+  .tag{background:var(--blue-light); color:var(--navy-2); font-family:var(--mono); font-size:11.5px; padding:3px 8px; border-radius:4px;}
+</style>
+</head>
+<body>
+
+<header class="hero-hpm">
+  <div class="hero-inner">
+    <div class="dashboard-brand">
+      <div class="logo-box"><img src="data:image/png;base64,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" alt="Hyundai Polytech México"></div>
+      <div class="brand-copy">
+        <div class="brand-eyebrow">Hyundai Polytech México · Departamento de Calidad</div>
+        <h1>Control de Documentos</h1>
+        <div class="brand-subtitle">Altas, bajas, suspensión y revisión anual de documentos y registros del SGC</div>
+      </div>
+    </div>
+    <div class="hero-status">
+      <div class="folio-pill">HPM-QI-08 Rev.4.1 · HPM-QF-00 Rev.00</div>
+      <div id="conexion-badge" class="cloud-status off"><span class="dot"></span><span id="conexion-badge-inner">Modo local (sin Firebase)</span></div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-view="dashboard" class="active">Panel General</button>
+  <button data-view="lista">Lista Maestra</button>
+  <button data-view="alta">Alta de Documento</button>
+  <button data-view="revision">Revisión Anual <span class="badge-count" id="tab-badge-revision" style="display:none;"></span></button>
+  <button data-view="suspension">Suspensión</button>
+  <button data-view="baja">Baja</button>
+  <button data-view="retencion">Tabla de Retención</button>
+  <button data-view="ajustes">Nomenclatura y Ajustes</button>
+</nav>
+
+<main>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <div class="view active" id="view-dashboard">
+    <div class="kpi-row" id="kpi-row"></div>
+
+    <section class="panel">
+      <h2>Documentos con revisión anual próxima o vencida <span class="hint">ordenado por urgencia</span></h2>
+      <div style="overflow-x:auto;">
+        <table id="tbl-dashboard-revision">
+          <thead><tr>
+            <th>Código</th><th>Nombre</th><th>Rev.</th><th>Última revisión</th><th>Próxima revisión</th><th>Estado</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Actividad reciente</h2>
+      <ul class="hist-list" id="dashboard-activity"></ul>
+    </section>
+  </div>
+
+  <!-- ===================== LISTA MAESTRA ===================== -->
+  <div class="view" id="view-lista">
+    <section class="panel">
+      <h2>Lista Maestra de Documentos <span class="hint">equivalente a HPM-QI-FO-02</span></h2>
+      <div class="filters">
+        <input type="text" id="f-texto" placeholder="Buscar por código o nombre...">
+        <select id="f-area"><option value="">Todas las áreas</option></select>
+        <select id="f-tipo"><option value="">Todos los tipos</option></select>
+        <select id="f-estado">
+          <option value="">Todos los estados</option>
+          <option value="Vigente">Vigente</option>
+          <option value="En Elaboración">En Elaboración</option>
+          <option value="Suspendido">Suspendido</option>
+          <option value="Baja">Baja</option>
+        </select>
+        <button class="btn" id="btn-clear-filters">Limpiar filtros</button>
+        <button class="btn" id="btn-export-csv">Exportar CSV</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="tbl-lista">
+          <thead><tr>
+            <th>No.</th><th>Código</th><th>Nombre</th><th>Área</th><th>Tipo</th><th>Rev.</th>
+            <th>Estado</th><th>Próx. revisión</th><th>Responsable</th><th>Acciones</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== ALTA ===================== -->
+  <div class="view" id="view-alta">
+    <div class="two-col">
+      <section class="panel">
+        <h2>Alta de Documento</h2>
+        <p class="field-note" style="margin-bottom:14px;">Todo documento nuevo inicia en <strong>Rev.00</strong>, conforme a la regla del SGC (HPM-QI-PR-08, §1‑A). El código se sugiere automáticamente según el área y tipo seleccionados.</p>
+        <form id="form-alta" class="form-grid">
+          <div>
+            <label for="alta-area">Área / Macroproceso</label>
+            <input type="text" id="alta-area" list="dl-areas" placeholder="Ej. QI, ENG, MFG..." required>
+            <datalist id="dl-areas"></datalist>
+          </div>
+          <div>
+            <label for="alta-tipo">Tipo de documento</label>
+            <select id="alta-tipo" required></select>
+          </div>
+          <div class="full">
+            <label for="alta-nombre">Nombre del documento</label>
+            <input type="text" id="alta-nombre" placeholder="Ej. Instructivo de Calibración de Micrómetros" required>
+          </div>
+          <div class="full">
+            <label>Código sugerido</label>
+            <div class="codigo-preview" id="alta-codigo-preview">—</div>
+            <div class="checkbox-line" style="margin-top:8px;">
+              <input type="checkbox" id="alta-codigo-manual">
+              <label for="alta-codigo-manual" style="margin:0; font-weight:400; color:var(--ink);">Asignar código manualmente</label>
+            </div>
+            <input type="text" id="alta-codigo-input" style="margin-top:8px; display:none;" placeholder="HPM-ÁREA-TIPO-###">
+          </div>
+          <div>
+            <label for="alta-responsable">Elaboró / Responsable</label>
+            <input type="text" id="alta-responsable" placeholder="Nombre" required>
+          </div>
+          <div>
+            <label for="alta-fecha">Fecha de emisión</label>
+            <input type="date" id="alta-fecha" required>
+          </div>
+          <div>
+            <label for="alta-ciclo">Ciclo de revisión (meses)</label>
+            <input type="number" id="alta-ciclo" min="1" value="12" required>
+          </div>
+          <div>
+            <label for="alta-estado-inicial">Estado inicial</label>
+            <select id="alta-estado-inicial">
+              <option value="Vigente">Vigente (aprobado)</option>
+              <option value="En Elaboración">En Elaboración (borrador)</option>
+            </select>
+          </div>
+          <div class="full">
+            <label for="alta-motivo">Motivo / descripción de la emisión</label>
+            <textarea id="alta-motivo" placeholder="Ej. Nueva estandarización requerida por cambio de proceso..."></textarea>
+          </div>
+          <div class="full btn-row">
+            <button type="submit" class="btn primary">Registrar alta</button>
+            <button type="reset" class="btn" id="btn-reset-alta">Limpiar formulario</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Reglas de numeración (HPM-QI-PR-08)</h2>
+        <div class="info-box">
+          <strong>Estándares técnicos / formatos / reportes / procedimientos</strong><br>
+          Formato: <code class="codigo">HPM-[ÁREA]-[TIPO]-[CONSECUTIVO]_Rev.[REV]</code><br>
+          El consecutivo continúa automáticamente por combinación de Área + Tipo.
+        </div>
+        <div class="info-box" style="margin-top:10px;">
+          <strong>Regulaciones de gestión de procesos (규정)</strong><br>
+          Gestión Empresarial / Orientado al Cliente / Soporte → <code class="codigo">HPP-##</code><br>
+          Instrucciones generales → <code class="codigo">HPI-##</code><br>
+          Numeración corrida, independiente del área.
+        </div>
+        <div class="info-box" style="margin-top:10px;">
+          Consulta la pestaña <strong>Nomenclatura y Ajustes</strong> para el detalle completo por tipo de documento y los consecutivos ya asignados.
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== REVISION ANUAL ===================== -->
+  <div class="view" id="view-revision">
+    <section class="panel">
+      <h2>Control de Revisión Anual</h2>
+      <p class="field-note" style="margin-bottom:12px;">Un documento debe revisarse cuando cambie: la política de gestión/ambiental, la organización o funciones, la norma del SGC aplicable, o los requisitos legales/del cliente — además de la revisión periódica por vencimiento de ciclo (HPM-QI-08, §1‑A‑⑨).</p>
+      <div style="overflow-x:auto;">
+        <table id="tbl-revision">
+          <thead><tr>
+            <th>Código</th><th>Nombre</th><th>Rev. actual</th><th>Última revisión</th><th>Próxima revisión</th><th>Estado</th><th>Acción</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Documentos importados sin fecha de última revisión confirmada <span class="hint">provenientes de HPM-QF-00</span></h2>
+      <p class="field-note" style="margin-bottom:12px;">Estos documentos se cargaron con su código, nombre y revisión vigente, pero HPM-QF-00 no especifica la fecha exacta de la última revisión. Usa "Registrar revisión" (modo "sin cambios") para confirmar la fecha real y activar el conteo del ciclo anual.</p>
+      <div style="overflow-x:auto;">
+        <table id="tbl-revision-sin-fecha">
+          <thead><tr><th>Código</th><th>Nombre</th><th>Área</th><th>Rev. actual</th><th>Acción</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== SUSPENSION ===================== -->
+  <div class="view" id="view-suspension">
+    <div class="two-col">
+      <section class="panel">
+        <h2>Suspender Documento</h2>
+        <p class="field-note" style="margin-bottom:12px;">La suspensión detiene temporalmente el uso de un documento vigente sin darlo de baja. Puede reactivarse en cualquier momento.</p>
+        <form id="form-suspension" class="form-grid">
+          <div class="full">
+            <label for="susp-doc">Documento</label>
+            <select id="susp-doc" required></select>
+          </div>
+          <div>
+            <label for="susp-fecha">Fecha de inicio</label>
+            <input type="date" id="susp-fecha" required>
+          </div>
+          <div>
+            <label for="susp-reactivacion">Fecha de reactivación prevista (opcional)</label>
+            <input type="date" id="susp-reactivacion">
+          </div>
+          <div class="full">
+            <label for="susp-motivo">Motivo de la suspensión</label>
+            <textarea id="susp-motivo" required placeholder="Ej. En espera de validación de cambio de ingeniería..."></textarea>
+          </div>
+          <div class="full btn-row">
+            <button type="submit" class="btn primary">Suspender documento</button>
+          </div>
+        </form>
+      </section>
+      <section class="panel">
+        <h2>Documentos suspendidos actualmente</h2>
+        <div style="overflow-x:auto;">
+          <table id="tbl-suspendidos">
+            <thead><tr><th>Código</th><th>Nombre</th><th>Desde</th><th>Motivo</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== BAJA ===================== -->
+  <div class="view" id="view-baja">
+    <div class="two-col">
+      <section class="panel">
+        <h2>Dar de Baja un Documento</h2>
+        <p class="field-note" style="margin-bottom:12px;">La baja es definitiva. Verifica el período de retención aplicable en la tabla de retención antes de confirmar la disposición final.</p>
+        <form id="form-baja" class="form-grid">
+          <div class="full">
+            <label for="baja-doc">Documento</label>
+            <select id="baja-doc" required></select>
+          </div>
+          <div>
+            <label for="baja-fecha">Fecha de baja</label>
+            <input type="date" id="baja-fecha" required>
+          </div>
+          <div>
+            <label for="baja-categoria">Categoría de retención</label>
+            <select id="baja-categoria" required></select>
+          </div>
+          <div class="full" id="baja-retencion-info" style="display:none;"></div>
+          <div>
+            <label for="baja-disposicion">Disposición final</label>
+            <select id="baja-disposicion" required>
+              <option value="Destruido">Destruido</option>
+              <option value="Archivado como referencia">Archivado como referencia</option>
+              <option value="Transferido a resguardo externo">Transferido a resguardo externo</option>
+            </select>
+          </div>
+          <div>
+            <label for="baja-responsable">Responsable de la baja</label>
+            <input type="text" id="baja-responsable" placeholder="Nombre" required>
+          </div>
+          <div class="full">
+            <label for="baja-motivo">Motivo de la baja</label>
+            <textarea id="baja-motivo" required placeholder="Ej. Documento reemplazado por nueva versión / proceso descontinuado..."></textarea>
+          </div>
+          <div class="full checkbox-line">
+            <input type="checkbox" id="baja-confirma" required>
+            <label for="baja-confirma" style="margin:0; font-weight:400;">Confirmo que se validó el período de retención aplicable antes de la disposición final</label>
+          </div>
+          <div class="full btn-row">
+            <button type="submit" class="btn danger" style="border-color:var(--danger); background:var(--danger-bg);">Confirmar baja definitiva</button>
+          </div>
+        </form>
+      </section>
+      <section class="panel">
+        <h2>Documentos dados de baja</h2>
+        <div style="overflow-x:auto;">
+          <table id="tbl-bajas">
+            <thead><tr><th>Código</th><th>Nombre</th><th>Fecha</th><th>Disposición</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== RETENCION ===================== -->
+  <div class="view" id="view-retencion">
+    <section class="panel">
+      <h2>Tabla de Retención Documental <span class="hint">tomada de HPM-QI-08, Anexo de retención</span></h2>
+      <div style="overflow-x:auto;">
+        <table class="subtle-table" id="tbl-retencion">
+          <thead><tr><th>Categoría</th><th>Tipo de documento / registro</th><th>IATF 16949</th><th>Ford CQI-23</th><th>Observaciones</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===================== AJUSTES ===================== -->
+  <div class="view" id="view-ajustes">
+    <section class="panel">
+      <h2>Tipos de documento y nomenclatura</h2>
+      <div class="info-box" style="margin-bottom:14px;">
+        En HPM coexisten dos convenciones de código, según lo confirmado en HPM-QF-00 (Lista Maestra) y HPM-QI-08:<br>
+        <strong>1) Documentos rectores del SGC</strong> (Manual, Proceso, Guía) — código <code class="codigo">HPM-[TIPO]-[CONSECUTIVO]</code>, sin segmento de área (ej. <code class="codigo">HPM-QI-08</code>, <code class="codigo">HPM-QP-07</code>). Aquí "QI"/"QP"/"QM" identifican el <em>tipo</em> de documento, no el área.<br>
+        <strong>2) Documentos operativos de área</strong> (formatos, reportes, instructivos, procedimientos específicos) — código <code class="codigo">HPM-[ÁREA]-[TIPO]-[CONSECUTIVO]</code> (ej. <code class="codigo">HPM-QI-FO-101</code>, <code class="codigo">HPM-MFG-RE-101</code>). Aquí "QI" es el área de Calidad.<br>
+        El sistema aplica automáticamente el patrón correcto según el tipo que selecciones en el Alta.
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="subtle-table">
+          <thead><tr><th>Clave</th><th>Descripción</th><th>Patrón de código</th></tr></thead>
+          <tbody id="tbl-tipos"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Consecutivos asignados por Área + Tipo</h2>
+      <div style="overflow-x:auto;">
+        <table class="subtle-table" id="tbl-consecutivos">
+          <thead><tr><th>Área</th><th>Tipo</th><th>Último consecutivo</th><th>Próximo código sugerido</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Ajustes generales</h2>
+      <div class="form-grid">
+        <div>
+          <label for="cfg-ciclo">Ciclo de revisión por defecto (meses)</label>
+          <input type="number" id="cfg-ciclo" min="1">
+          <div class="field-note">Aplica solo a documentos nuevos que se den de alta después de este cambio.</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="btn-guardar-cfg">Guardar ajuste</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Conexión con Firebase</h2>
+      <div class="info-box" id="ajustes-firebase-info">
+        Este archivo intenta conectarse a Firebase usando el objeto <code class="codigo">FIREBASE_CONFIG</code> definido al inicio del &lt;script&gt;. Mientras contenga los valores de ejemplo, la app funciona solo con almacenamiento local del navegador.
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="btn-sync-firebase">Sincronizar todo el registro local → Firebase</button>
+      </div>
+      <p class="field-note" style="margin-top:8px;">Úsalo una sola vez, después de configurar tu proyecto de Firebase, para subir los 34 documentos ya cargados localmente. Los cambios posteriores (altas, revisiones, suspensiones, bajas) se sincronizan automáticamente.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Respaldo de datos</h2>
+      <p class="field-note" style="margin-bottom:10px;">Los datos se guardan localmente en este navegador. Exporta un respaldo periódicamente.</p>
+      <div class="btn-row">
+        <button class="btn" id="btn-export-json">Exportar respaldo (JSON)</button>
+        <button class="btn" id="btn-import-json">Importar respaldo (JSON)</button>
+        <input type="file" id="file-import-json" accept="application/json" style="display:none;">
+        <button class="btn danger" id="btn-reset-data">Restablecer a datos de ejemplo</button>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<!-- MODALS -->
+<div class="overlay" id="overlay-historial">
+  <div class="modal">
+    <button class="modal-close" data-close="overlay-historial">&times;</button>
+    <h2 id="hist-modal-titulo">Historial de revisiones</h2>
+    <div class="modal-sub" id="hist-modal-sub"></div>
+    <ul class="hist-list" id="hist-modal-list"></ul>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-revisar">
+  <div class="modal">
+    <button class="modal-close" data-close="overlay-revisar">&times;</button>
+    <h2>Registrar revisión anual</h2>
+    <div class="modal-sub" id="revisar-modal-sub"></div>
+    <form id="form-revisar" class="form-grid">
+      <input type="hidden" id="revisar-doc-id">
+      <fieldset class="full">
+        <legend>Tipo de revisión</legend>
+        <label class="radio-opt">
+          <input type="radio" name="revisar-tipo" value="sin-cambios" checked>
+          <span><strong>Revisión sin cambios</strong><span class="d"> — ratifica la vigencia del documento, mantiene el mismo número de revisión.</span></span>
+        </label>
+        <label class="radio-opt">
+          <input type="radio" name="revisar-tipo" value="con-cambios">
+          <span><strong>Revisión con cambios</strong><span class="d"> — incrementa la revisión (Rev.actual + 1); la parte modificada debe identificarse en negritas en el documento.</span></span>
+        </label>
+      </fieldset>
+      <div>
+        <label for="revisar-fecha">Fecha de revisión</label>
+        <input type="date" id="revisar-fecha" required>
+      </div>
+      <div>
+        <label for="revisar-usuario">Revisó</label>
+        <input type="text" id="revisar-usuario" required placeholder="Nombre">
+      </div>
+      <div class="full">
+        <label for="revisar-motivo">Motivo / contenido de la revisión</label>
+        <textarea id="revisar-motivo" required placeholder="Ej. Sin cambios, se ratifica vigencia / Se actualiza criterio de aceptación..."></textarea>
+      </div>
+      <div class="full btn-row">
+        <button type="submit" class="btn primary">Guardar revisión</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   ESTADO Y PERSISTENCIA
+============================================================ */
+const STORAGE_KEY = 'hpm_control_documentos_v2';
+const HOY = new Date().toISOString().slice(0,10);
+
+/* ============================================================
+   FIREBASE — reemplaza estos valores por los de tu proyecto
+   (Firebase Console → Configuración del proyecto → Tus apps → Config).
+   Mientras queden los valores de ejemplo, la app funciona en modo local
+   (localStorage) sin conectarse a ningún backend.
+============================================================ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBOx48h66kTr24sFJYAhlTJAIigyG_sQw4",
+  authDomain: "control-de-documentos-hpm.firebaseapp.com",
+  projectId: "control-de-documentos-hpm",
+  storageBucket: "control-de-documentos-hpm.firebasestorage.app",
+  messagingSenderId: "168903837384",
+  appId: "1:168903837384:web:95cddff8ae70be992c87fd",
+};
+let firebaseEnabled = false;
+let fbApp = null, fbAuth = null, fbDb = null;
+let firestoreUnsub = null;
+
+function firebaseConfigurado(){
+  return FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('REEMPLAZAR');
+}
+
+function badgeConexion(estado, texto){
+  const el = document.getElementById('conexion-badge-inner');
+  const wrap = document.getElementById('conexion-badge');
+  if(!el || !wrap) return;
+  const map = {ok:'ok', warn:'warn', error:'ng', off:'off'};
+  wrap.className = 'cloud-status '+(map[estado]||'off');
+  el.textContent = texto;
+}
+
+function initFirebase(){
+  if(!firebaseConfigurado()){
+    badgeConexion('off','Modo local (sin Firebase)');
+    return;
+  }
+  try{
+    fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    fbDb.enablePersistence().catch(()=>{ /* varias pestañas abiertas, o navegador sin soporte: se ignora */ });
+    badgeConexion('warn','Conectando a Firebase...');
+    fbAuth.signInAnonymously().then(()=>{
+      firebaseEnabled = true;
+      badgeConexion('ok','Firebase conectado');
+      suscribirFirestore();
+    }).catch(err=>{
+      console.warn('No se pudo autenticar en Firebase:', err);
+      badgeConexion('error','Error de autenticación Firebase');
+    });
+  }catch(err){
+    console.warn('No se pudo inicializar Firebase:', err);
+    badgeConexion('error','Error al inicializar Firebase');
+  }
+}
+
+function suscribirFirestore(){
+  if(firestoreUnsub) firestoreUnsub();
+  firestoreUnsub = fbDb.collection('documentos').onSnapshot(snapshot=>{
+    if(snapshot.empty){
+      // Colección vacía en Firebase: se conserva el estado local (seed) hasta que se migre manualmente.
+      renderAll();
+      return;
+    }
+    state.documentos = snapshot.docs.map(d=> ({ id: d.id, ...d.data() }));
+    save();
+    renderAll();
+  }, err=>{
+    console.warn('Error escuchando Firestore (revisa las reglas de seguridad):', err);
+    badgeConexion('error','Error leyendo Firestore (revisa reglas)');
+  });
+  fbDb.collection('config').doc('general').get().then(snap=>{
+    if(snap.exists && snap.data().cicloDefault){
+      state.cicloDefault = snap.data().cicloDefault;
+      renderAjustes();
+    }
+  }).catch(()=>{});
+}
+
+// Guarda localmente y, si Firebase está conectado, sincroniza el documento a Firestore
+// (clave del documento = código, así ambos lados quedan alineados).
+function persistirDocumento(doc){
+  save();
+  if(firebaseEnabled){
+    fbDb.collection('documentos').doc(doc.codigo).set(doc, {merge:true})
+      .catch(err=> toast('No se pudo guardar en Firebase: '+err.message));
+  }
+}
+
+function guardarConfigFirestore(){
+  if(!firebaseEnabled) return;
+  fbDb.collection('config').doc('general').set({cicloDefault: state.cicloDefault}, {merge:true}).catch(()=>{});
+}
+
+// Sube TODO el estado local a Firestore de una sola vez (usado para la carga inicial
+// o tras importar un respaldo / restablecer datos de ejemplo).
+function migrarTodoAFirestore(mostrarToast){
+  if(!firebaseEnabled) return;
+  const batch = fbDb.batch();
+  state.documentos.forEach(d=> batch.set(fbDb.collection('documentos').doc(d.codigo), d));
+  batch.set(fbDb.collection('config').doc('general'), {cicloDefault: state.cicloDefault}, {merge:true});
+  batch.commit().then(()=>{ if(mostrarToast) toast('Datos sincronizados con Firebase.'); })
+    .catch(err=> toast('Error al sincronizar con Firebase: '+err.message));
+}
+
+// Tipos sin área embebida en el código (documentos rectores del SGC, per HPM-QF-00 / HPM-QI-08)
+const TIPOS_SIN_AREA = new Set(['QM','QP','QI','QF']);
+
+const TIPOS = {
+  QM:  {label:'Manual de Calidad (Quality Manual)',            patron:'HPM-QM-[##]'},
+  QP:  {label:'Proceso de Negocio (Quality Process)',          patron:'HPM-QP-[##]'},
+  QI:  {label:'Guía / Lineamiento (Quality Guideline — SGC, sin área en el código)', patron:'HPM-QI-[##]'},
+  QF:  {label:'Formato Maestro / Registro rector (Quality Format)', patron:'HPM-QF-[##]'},
+  PR:  {label:'Procedimiento de área',          patron:'HPM-[ÁREA]-PR-[##]'},
+  IT:  {label:'Instructivo de Trabajo (WS)',    patron:'HPM-[ÁREA]-IT-[###]'},
+  FO:  {label:'Formato de área',                patron:'HPM-[ÁREA]-FO-[###]'},
+  RE:  {label:'Reporte / Registro de área',     patron:'HPM-[ÁREA]-RE-[###]'},
+  MCA: {label:'Manual de área',                 patron:'HPM-[ÁREA]-MC-[##]'},
+  CP:  {label:'Plan de Control (Management Plan)', patron:'HPM-[ÁREA]-CP-[###]'},
+  IS:  {label:'Estándar de Inspección',         patron:'HPM-[ÁREA]-IS-[###]'},
+  HPP: {label:'Regulación de Gestión de Procesos (Empresarial/Cliente/Soporte)', patron:'HPP-[##]'},
+  HPI: {label:'Instrucción General',            patron:'HPI-[##]'},
+};
+
+const CATEGORIAS_RETENCION = [
+  {id:'sgc', nombre:'Documentos del Sistema de Gestión de Calidad', tipo:'Manual de calidad, procedimientos, instrucciones de trabajo', iatf:'Última versión vigente (conservar al menos 3 años de historial de revisiones)', cqi:'Última versión + al menos 1 revisión anterior', obs:'Aceptable en electrónico o papel'},
+  {id:'capacitacion', nombre:'Registros de Capacitación', tipo:'Listas de asistencia, resultados de examen, certificados de calificación', iatf:'Al menos 3 años', cqi:'Al menos 3 años', obs:'Se requiere seguimiento de calificación del operador'},
+  {id:'cliente', nombre:'Documentos de Requisitos del Cliente', tipo:'Especificaciones del cliente, CSR, planos, BOM', iatf:'Vigente hasta expiración + 1 año tras disposición', cqi:'Fin de programa + 1 año', obs:'Debe actualizarse ante cambios del cliente'},
+  {id:'proceso', nombre:'Registros de Control de Proceso', tipo:'PFMEA, Plan de Control, Instrucciones de Trabajo, EPC', iatf:'Vida del producto + 1 año', cqi:'Fin de programa + al menos 1 año', obs:'Vinculado con PSW'},
+  {id:'ppap', nombre:'Registros de Aprobación de Producto (PPAP)', tipo:'PSW, aprobación de muestras, IMDS', iatf:'Vida del producto + 1 año', cqi:'Fin de programa + al menos 1 año', obs:'Se requieren documentos de aprobación OEM'},
+  {id:'inspeccion', nombre:'Registros de Prueba / Inspección', tipo:'Inspección de primera/media/última pieza, inspección dimensional, prueba de desempeño', iatf:'Al menos 3 años', cqi:'Fin de programa + al menos 1 año', obs:'Las características importantes requieren control separado'},
+  {id:'nc', nombre:'Registros de No Conformidad / Solución de Problemas', tipo:'NCR, Reporte 8D, quejas de cliente, defectos internos', iatf:'Al menos 3 años', cqi:'Se recomienda al menos 3 años', obs:'Documentación de prevención de causa raíz'},
+  {id:'calibracion', nombre:'Registros de Medición / Calibración', tipo:'Registros de calibración de equipo de medición, MSA', iatf:'Cada ciclo + 1 año', cqi:'Cada ciclo + 1 año', obs:'Debe cumplir requisitos legales'},
+  {id:'mtto', nombre:'Registros de Mantenimiento de Equipo', tipo:'Registros de inspección PM, historial de mantenimiento', iatf:'Vida del producto + 1 año', cqi:'Igual', obs:'Referirse a CQI-23 (4.8, 4.9)'},
+  {id:'trazabilidad', nombre:'Registros de Trazabilidad de Producción', tipo:'Bitácora de producción, LOTE, trazabilidad', iatf:'Vida del producto + rango (partes de seguridad: 15 años)', cqi:'Partes de seguridad/reguladas: al menos 15 años', obs:'Retención de largo plazo para partes de seguridad'},
+  {id:'auditoria', nombre:'Registros de Auditoría de Cliente / Terceros', tipo:'Auditoría interna, auditoría de segunda parte, respuesta a auditoría de cliente', iatf:'Al menos 3 años', cqi:'Igual', obs:'Mantener rastro de auditoría'},
+];
+
+function seedData(){
+  const docs = [
+    // ---- Documento rector de este propio sistema ----
+    mk('HPM-QF-00','Lista Maestra de Control de Documentos HPM','SGC','QF','00','2026-01-17','2026-01-17','Vigente','Alberto García',[
+      {rev:'00',fecha:'2026-01-17',motivo:'Inicial',usuario:'Alberto García'},
+    ]),
+    // ---- HPM-QI-08, con historial real tomado del anexo Rev.4 ----
+    mk('HPM-QI-08','Document & Record Management Guideline (Documento y Gestión de Registros)','Sistema','QI','4.1','','2025-01-10','Vigente','Gte. SGC',[
+      {rev:'1',fecha:'2018-01-15',motivo:'IATF16949: revisión completa con introducción de la versión 2016',usuario:'Gte. SGC'},
+      {rev:'2',fecha:'2022-01-15',motivo:'Revisión por cambios en organización y política de gestión/calidad, y división de funciones',usuario:'Gte. SGC'},
+      {rev:'3',fecha:'2024-01-02',motivo:'Revisión por cambios en organización y política de gestión/calidad, y división de funciones',usuario:'Gte. SGC'},
+      {rev:'4',fecha:'2025-01-10',motivo:'Revisión por cambios en organización y política de gestión/calidad, y división de funciones',usuario:'Gte. SGC'},
+      {rev:'4.1',fecha:'',motivo:'Ajuste menor de revisión (4→4.1) registrado en el archivo fuente; sin detalle de motivo en el historial original — validar con Gte. SGC',usuario:''},
+    ]),
+    // ---- Resto del Listado Maestro HPM-QF-00 (Manuales, Procesos, Guías) ----
+    mkImportado('HPM-QM-01','IATF 16949:2016 Manual — Global','Sistema de Gestión','QM','4'),
+    mkImportado('HPM-QM-02','IATF 16949:2016 Manual — Operación','Sistema de Gestión','QM','4'),
+    mkImportado('HPM-QP-01','Business Management Process','Dirección','QP','4'),
+    mkImportado('HPM-QP-02','Internal Audit Process','Auditoría Interna','QP','4'),
+    mkImportado('HPM-QP-03','Sales Management Process','Ventas','QP','4'),
+    mkImportado('HPM-QP-04','Development Process','Ingeniería','QP','4'),
+    mkImportado('HPM-QP-05','Quality Assurance Process','Calidad','QP','4'),
+    mkImportado('HPM-QP-06','Purchasing Process','Compras','QP','4'),
+    mkImportado('HPM-QP-07','Production Process','Producción','QP','4'),
+    mkImportado('HPM-QP-08','Logistics Process','Logística','QP','4'),
+    mkImportado('HPM-QP-09','Quality Control Process','Calidad','QP','4'),
+    mkImportado('HPM-QP-10','Corrective & Preventive Action Process','Mejora','QP','4'),
+    mkImportado('HPM-QP-11','Customer Dissatisfaction Management Process','Cliente','QP','4'),
+    mkImportado('HPM-QP-12','Facility Management Process','Infraestructura','QP','4'),
+    mkImportado('HPM-QP-13','Education & Training Process','RH','QP','4'),
+    mkImportado('HPM-QI-01','Organization Communication Guideline','Dirección','QI','4'),
+    mkImportado('HPM-QI-02','Risk Analysis Guideline','Planeación','QI','4'),
+    mkImportado('HPM-QI-03','Emergency Planning Guideline','Seguridad','QI','4'),
+    mkImportado('HPM-QI-04','3R-5S Guideline','Planta','QI','4'),
+    mkImportado('HPM-QI-05','Monitoring & Measurement Equipment Guideline','Calidad','QI','4'),
+    mkImportado('HPM-QI-06','Measurement System Management Guideline','Calidad','QI','4'),
+    mkImportado('HPM-QI-07','Laboratory Management Guideline','Laboratorio','QI','4'),
+    // ---- Formatos/reportes operativos de Calidad (confirmados previamente) ----
+    mk('HPM-QI-FO-101','Minuta VOC/QRQC','QI','FO','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-102','Root Cause Tool FD+B & 3L5W','QI','FO','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-103','4 Panel','QI','FO','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-104','9 Básicos del Proceso','QI','FO','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-105','One Pager','QI','FO','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-106',"8D's Mando",'QI','FO','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-107',"8D's Mobis",'QI','FO','00','','','Vigente','',[]),
+    mk('HPM-MFG-RE-101','Reporte OEE','MFG','RE','00','','','Vigente','',[]),
+    mk('HPM-QI-FO-108',"8D's Mando America",'QI','FO','00','','','En Elaboración','',[]),
+    mk('HPM-QI-FO-109',"8D's Hyundai Mobis",'QI','FO','00','','','En Elaboración','',[]),
+  ];
+  return {
+    documentos: docs,
+    cicloDefault: 12,
+    actividad: [{fecha:new Date().toISOString(), texto:'Registro inicial cargado desde HPM-QF-00 (Lista Maestra Rev.00) y HPM-QI-08 (Rev.4.1)'}],
+  };
+}
+
+// Documento con fecha de emisión/última revisión conocidas
+function mk(codigo,nombre,area,tipo,rev,fechaEmision,fechaUltRev,estado,responsable,historial){
+  const femision = fechaEmision || '';
+  const frev = fechaUltRev || '';
+  return {
+    id: codigo,
+    codigo, nombre, area, tipoDoc: tipo,
+    revisionActual: rev,
+    fechaEmision: femision || (historial[0] && historial[0].fecha) || '',
+    fechaUltimaRevision: frev || (historial.length ? historial[historial.length-1].fecha : ''),
+    cicloRevisionMeses: 12,
+    responsable: responsable || '',
+    estado: estado,
+    historial: historial.length ? historial : [{rev:rev, fecha:frev||femision, motivo:'Emisión inicial', usuario: responsable||''}],
+    suspension: null,
+    baja: null,
+    creado: femision || frev || '',
+  };
+}
+
+// Documento importado de HPM-QF-00: se conoce revisión y estatus, pero no la fecha exacta de última revisión
+// (no incluida en la Lista Maestra) — queda marcado como pendiente de completar en el sistema.
+function mkImportado(codigo,nombre,area,tipo,rev){
+  return mk(codigo,nombre,area,tipo,rev,'','', 'Vigente','', [
+    {rev:rev, fecha:'', motivo:'Importado de HPM-QF-00 (Lista Maestra de Control de Documentos, Rev.00) — fecha de última revisión pendiente de confirmar', usuario:'Alberto García'}
+  ]);
+}
+
+function uid(){ return 'd'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+
+let state = load();
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.warn('No se pudo leer almacenamiento local', e); }
+  return seedData();
+}
+function save(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function logActividad(texto){
+  state.actividad.unshift({fecha: new Date().toISOString(), texto});
+  state.actividad = state.actividad.slice(0,40);
+}
+
+/* ============================================================
+   HELPERS DE FECHA / ESTADO
+============================================================ */
+function addMonths(dateStr, months){
+  const d = new Date(dateStr+'T00:00:00');
+  d.setMonth(d.getMonth()+months);
+  return d.toISOString().slice(0,10);
+}
+function proximaRevision(doc){
+  if(!doc.fechaUltimaRevision) return null;
+  return addMonths(doc.fechaUltimaRevision, doc.cicloRevisionMeses || 12);
+}
+function diasHasta(dateStr){
+  if(!dateStr) return null;
+  const d1 = new Date(HOY+'T00:00:00');
+  const d2 = new Date(dateStr+'T00:00:00');
+  return Math.round((d2-d1)/86400000);
+}
+function fmt(dateStr){
+  if(!dateStr) return '—';
+  const [y,m,d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+function formatRev(rev){
+  if(rev===undefined || rev===null || rev==='') return '—';
+  const s = String(rev);
+  return s.includes('.') ? s : s.padStart(2,'0');
+}
+function incrementarRevision(rev){
+  const s = String(rev);
+  if(s.includes('.')){
+    const major = parseInt(s.split('.')[0],10) || 0;
+    return String(major+1).padStart(2,'0');
+  }
+  const n = parseInt(s,10) || 0;
+  return String(n+1).padStart(2,'0');
+}
+function badgeEstado(estado){
+  const map = {'Vigente':'ok','En Elaboración':'draft','Suspendido':'warn','Baja':'danger'};
+  return `<span class="badge ${map[estado]||'neutral'}">${estado}</span>`;
+}
+function badgeRevision(doc){
+  if(doc.estado !== 'Vigente') return '<span class="badge neutral">—</span>';
+  if(!doc.fechaUltimaRevision) return '<span class="badge neutral">Fecha de última revisión pendiente</span>';
+  const prox = proximaRevision(doc);
+  const dias = diasHasta(prox);
+  if(dias < 0) return `<span class="badge danger">Vencida (${fmt(prox)})</span>`;
+  if(dias <= 60) return `<span class="badge warn">${fmt(prox)} · en ${dias} días</span>`;
+  return `<span class="badge ok">${fmt(prox)}</span>`;
+}
+
+/* ============================================================
+   NUMERACIÓN AUTOMÁTICA
+============================================================ */
+function sugerirCodigo(area, tipo){
+  area = (area||'').trim().toUpperCase();
+  if(tipo === 'HPP' || tipo === 'HPI'){
+    let maxN = 0;
+    state.documentos.filter(d=>d.tipoDoc===tipo).forEach(d=>{
+      const m = d.codigo.match(/-(\d+)$/);
+      if(m) maxN = Math.max(maxN, parseInt(m[1],10));
+    });
+    return `${tipo}-${String(maxN+1).padStart(2,'0')}`;
+  }
+  if(TIPOS_SIN_AREA.has(tipo)){
+    let maxN = 0;
+    state.documentos.filter(d=>d.tipoDoc===tipo).forEach(d=>{
+      const m = d.codigo.match(/-(\d+)$/);
+      if(m) maxN = Math.max(maxN, parseInt(m[1],10));
+    });
+    return `HPM-${tipo}-${String(maxN+1).padStart(2,'0')}`;
+  }
+  if(!area) return '';
+  const grupo = state.documentos.filter(d=> d.area===area && d.tipoDoc===tipo);
+  let maxN = 0, digits = 2;
+  grupo.forEach(d=>{
+    const m = d.codigo.match(/-(\d+)$/);
+    if(m){
+      const num = parseInt(m[1],10);
+      if(num >= maxN){ maxN = num; digits = m[1].length; }
+    }
+  });
+  const n = maxN + 1;
+  return `HPM-${area}-${tipo}-${String(n).padStart(digits,'0')}`;
+}
+
+/* ============================================================
+   RENDER: TABS
+============================================================ */
+const views = ['dashboard','lista','alta','revision','suspension','baja','retencion','ajustes'];
+document.getElementById('tabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  views.forEach(v=> document.getElementById('view-'+v).classList.toggle('active', v===btn.dataset.view));
+  renderAll();
+});
+
+/* ============================================================
+   RENDER: DASHBOARD
+============================================================ */
+function renderDashboard(){
+  const docs = state.documentos;
+  const vigentes = docs.filter(d=>d.estado==='Vigente').length;
+  const elaboracion = docs.filter(d=>d.estado==='En Elaboración').length;
+  const suspendidos = docs.filter(d=>d.estado==='Suspendido').length;
+  const bajas = docs.filter(d=>d.estado==='Baja').length;
+  const vigentesConFecha = docs.filter(d=> d.estado==='Vigente' && d.fechaUltimaRevision);
+  const vencidas = vigentesConFecha.filter(d=> diasHasta(proximaRevision(d)) < 0).length;
+  const proximas = vigentesConFecha.filter(d=>{ const dd = diasHasta(proximaRevision(d)); return dd >= 0 && dd <= 60; }).length;
+  const sinFecha = docs.filter(d=> d.estado==='Vigente' && !d.fechaUltimaRevision).length;
+
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi ok"><div class="num">${vigentes}</div><div class="lbl">Vigentes</div></div>
+    <div class="kpi draft"><div class="num">${elaboracion}</div><div class="lbl">En Elaboración</div></div>
+    <div class="kpi warn"><div class="num">${suspendidos}</div><div class="lbl">Suspendidos</div></div>
+    <div class="kpi danger"><div class="num">${bajas}</div><div class="lbl">Dados de baja</div></div>
+    <div class="kpi warn"><div class="num">${proximas}</div><div class="lbl">Próximos a revisión (≤60 días)</div></div>
+    <div class="kpi danger"><div class="num">${vencidas}</div><div class="lbl">Revisión vencida</div></div>
+    <div class="kpi"><div class="num">${sinFecha}</div><div class="lbl">Sin fecha de última revisión registrada</div></div>
+  `;
+
+  const badge = document.getElementById('tab-badge-revision');
+  const total = vencidas + proximas;
+  if(total>0){ badge.style.display='inline-block'; badge.textContent = total; } else { badge.style.display='none'; }
+
+  const relevantes = vigentesConFecha
+    .map(d=>({d, dias: diasHasta(proximaRevision(d))}))
+    .filter(x=>x.dias<=60)
+    .sort((a,b)=>a.dias-b.dias)
+    .slice(0,12);
+
+  const tbody = document.querySelector('#tbl-dashboard-revision tbody');
+  tbody.innerHTML = relevantes.length ? relevantes.map(({d})=>`
+    <tr>
+      <td class="codigo">${d.codigo}</td>
+      <td>${d.nombre}</td>
+      <td class="mono">${formatRev(d.revisionActual)}</td>
+      <td>${fmt(d.fechaUltimaRevision)}</td>
+      <td>${badgeRevision(d)}</td>
+      <td>${badgeEstado(d.estado)}</td>
+      <td><button class="btn small" onclick="abrirRevisar('${d.id}')">Revisar</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">No hay documentos próximos a vencer en los siguientes 60 días.</td></tr>`;
+
+  const act = document.getElementById('dashboard-activity');
+  act.innerHTML = state.actividad.length ? state.actividad.slice(0,10).map(a=>`
+    <li><span class="rev-date">${new Date(a.fecha).toLocaleString('es-MX')}</span><br>${a.texto}</li>
+  `).join('') : '<li>Sin actividad registrada todavía.</li>';
+}
+
+/* ============================================================
+   RENDER: LISTA MAESTRA
+============================================================ */
+function poblarFiltros(){
+  const areas = [...new Set(state.documentos.map(d=>d.area))].sort();
+  const fArea = document.getElementById('f-area');
+  const cur = fArea.value;
+  fArea.innerHTML = '<option value="">Todas las áreas</option>' + areas.map(a=>`<option value="${a}">${a}</option>`).join('');
+  fArea.value = cur;
+
+  const fTipo = document.getElementById('f-tipo');
+  const curT = fTipo.value;
+  fTipo.innerHTML = '<option value="">Todos los tipos</option>' + Object.keys(TIPOS).map(t=>`<option value="${t}">${t} — ${TIPOS[t].label}</option>`).join('');
+  fTipo.value = curT;
+}
+
+function renderLista(){
+  poblarFiltros();
+  const texto = document.getElementById('f-texto').value.toLowerCase();
+  const area = document.getElementById('f-area').value;
+  const tipo = document.getElementById('f-tipo').value;
+  const estado = document.getElementById('f-estado').value;
+
+  let docs = state.documentos.filter(d=>{
+    if(texto && !(d.codigo.toLowerCase().includes(texto) || d.nombre.toLowerCase().includes(texto))) return false;
+    if(area && d.area !== area) return false;
+    if(tipo && d.tipoDoc !== tipo) return false;
+    if(estado && d.estado !== estado) return false;
+    return true;
+  });
+
+  const tbody = document.querySelector('#tbl-lista tbody');
+  tbody.innerHTML = docs.length ? docs.map((d,i)=>`
+    <tr>
+      <td>${i+1}</td>
+      <td class="codigo">${d.codigo}</td>
+      <td>${d.nombre}</td>
+      <td>${d.area}</td>
+      <td>${d.tipoDoc}</td>
+      <td class="mono">${formatRev(d.revisionActual)}</td>
+      <td>${badgeEstado(d.estado)}</td>
+      <td>${badgeRevision(d)}</td>
+      <td>${d.responsable||'—'}</td>
+      <td>
+        <button class="btn small" onclick="abrirHistorial('${d.id}')">Historial</button>
+        ${d.estado==='Vigente' ? `<button class="btn small" onclick="abrirRevisar('${d.id}')">Revisar</button>` : ''}
+      </td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="10">No hay documentos que coincidan con el filtro.</td></tr>`;
+}
+
+document.getElementById('f-texto').addEventListener('input', renderLista);
+document.getElementById('f-area').addEventListener('change', renderLista);
+document.getElementById('f-tipo').addEventListener('change', renderLista);
+document.getElementById('f-estado').addEventListener('change', renderLista);
+document.getElementById('btn-clear-filters').addEventListener('click', ()=>{
+  document.getElementById('f-texto').value='';
+  document.getElementById('f-area').value='';
+  document.getElementById('f-tipo').value='';
+  document.getElementById('f-estado').value='';
+  renderLista();
+});
+document.getElementById('btn-export-csv').addEventListener('click', exportarCSV);
+
+function exportarCSV(){
+  const rows = [['No.','Código','Nombre','Área','Tipo','Rev.','Estado','Última revisión','Próxima revisión','Responsable']];
+  state.documentos.forEach((d,i)=>{
+    rows.push([i+1, d.codigo, d.nombre, d.area, d.tipoDoc, d.revisionActual, d.estado, d.fechaUltimaRevision, d.estado==='Vigente'?proximaRevision(d):'', d.responsable]);
+  });
+  const csv = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  descargarArchivo('Lista_Maestra_Documentos_HPM.csv', csv, 'text/csv');
+  toast('Lista maestra exportada.');
+}
+function descargarArchivo(nombre, contenido, tipo){
+  const blob = new Blob([contenido], {type: tipo});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   RENDER: ALTA
+============================================================ */
+function poblarAltaSelects(){
+  const areas = [...new Set(state.documentos.map(d=>d.area))].sort();
+  document.getElementById('dl-areas').innerHTML = areas.map(a=>`<option value="${a}">`).join('');
+  const selTipo = document.getElementById('alta-tipo');
+  selTipo.innerHTML = Object.keys(TIPOS).map(t=>`<option value="${t}">${t} — ${TIPOS[t].label}</option>`).join('');
+}
+function actualizarPreviewCodigo(){
+  const area = document.getElementById('alta-area').value;
+  const tipo = document.getElementById('alta-tipo').value;
+  const manual = document.getElementById('alta-codigo-manual').checked;
+  if(manual) return;
+  const sugerido = sugerirCodigo(area, tipo) || '—';
+  document.getElementById('alta-codigo-preview').textContent = sugerido;
+}
+document.getElementById('alta-area').addEventListener('input', actualizarPreviewCodigo);
+document.getElementById('alta-tipo').addEventListener('change', actualizarPreviewCodigo);
+document.getElementById('alta-codigo-manual').addEventListener('change', (e)=>{
+  const manualInput = document.getElementById('alta-codigo-input');
+  const preview = document.getElementById('alta-codigo-preview');
+  if(e.target.checked){
+    manualInput.style.display='block';
+    preview.style.display='none';
+    manualInput.value = document.getElementById('alta-codigo-preview').textContent;
+  } else {
+    manualInput.style.display='none';
+    preview.style.display='inline-block';
+    actualizarPreviewCodigo();
+  }
+});
+
+document.getElementById('form-alta').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const area = document.getElementById('alta-area').value.trim().toUpperCase();
+  const tipo = document.getElementById('alta-tipo').value;
+  const manual = document.getElementById('alta-codigo-manual').checked;
+  const codigo = manual ? document.getElementById('alta-codigo-input').value.trim() : sugerirCodigo(area, tipo);
+  if(!codigo){ toast('No se pudo determinar un código. Verifica área y tipo.'); return; }
+  if(state.documentos.some(d=>d.codigo.toLowerCase()===codigo.toLowerCase())){
+    toast('Ese código ya existe. Usa uno distinto.'); return;
+  }
+  const fecha = document.getElementById('alta-fecha').value || HOY;
+  const responsable = document.getElementById('alta-responsable').value.trim();
+  const doc = {
+    id: codigo,
+    codigo, nombre: document.getElementById('alta-nombre').value.trim(),
+    area, tipoDoc: tipo,
+    revisionActual: '00',
+    fechaEmision: fecha,
+    fechaUltimaRevision: fecha,
+    cicloRevisionMeses: parseInt(document.getElementById('alta-ciclo').value,10) || state.cicloDefault,
+    responsable,
+    estado: document.getElementById('alta-estado-inicial').value,
+    historial: [{rev:'00', fecha, motivo: document.getElementById('alta-motivo').value.trim() || 'Emisión inicial', usuario: responsable}],
+    suspension: null, baja: null,
+    creado: fecha,
+  };
+  state.documentos.push(doc);
+  logActividad(`Alta registrada: <strong>${doc.codigo}</strong> — ${doc.nombre}`);
+  persistirDocumento(doc);
+  document.getElementById('form-alta').reset();
+  document.getElementById('alta-fecha').value = HOY;
+  document.getElementById('alta-codigo-manual').dispatchEvent(new Event('change'));
+  actualizarPreviewCodigo();
+  toast(`Documento ${doc.codigo} registrado.`);
+  renderAll();
+});
+
+/* ============================================================
+   RENDER: REVISION ANUAL
+============================================================ */
+function renderRevision(){
+  const conFecha = state.documentos.filter(d=>d.estado==='Vigente' && d.fechaUltimaRevision)
+    .map(d=>({d, dias: diasHasta(proximaRevision(d))}))
+    .sort((a,b)=>a.dias-b.dias);
+  const tbody = document.querySelector('#tbl-revision tbody');
+  tbody.innerHTML = conFecha.length ? conFecha.map(({d})=>`
+    <tr>
+      <td class="codigo">${d.codigo}</td>
+      <td>${d.nombre}</td>
+      <td class="mono">${formatRev(d.revisionActual)}</td>
+      <td>${fmt(d.fechaUltimaRevision)}</td>
+      <td>${badgeRevision(d)}</td>
+      <td>${badgeEstado(d.estado)}</td>
+      <td><button class="btn small" onclick="abrirRevisar('${d.id}')">Registrar revisión</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="7">No hay documentos vigentes con fecha registrada.</td></tr>`;
+
+  const sinFecha = state.documentos.filter(d=>d.estado==='Vigente' && !d.fechaUltimaRevision);
+  const tbody2 = document.querySelector('#tbl-revision-sin-fecha tbody');
+  tbody2.innerHTML = sinFecha.length ? sinFecha.map(d=>`
+    <tr>
+      <td class="codigo">${d.codigo}</td>
+      <td>${d.nombre}</td>
+      <td>${d.area}</td>
+      <td class="mono">${formatRev(d.revisionActual)}</td>
+      <td><button class="btn small" onclick="abrirRevisar('${d.id}')">Registrar revisión</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="5">Todos los documentos vigentes tienen fecha de última revisión registrada.</td></tr>`;
+}
+
+function abrirRevisar(id){
+  const doc = state.documentos.find(d=>d.id===id);
+  if(!doc) return;
+  document.getElementById('revisar-doc-id').value = id;
+  document.getElementById('revisar-modal-sub').innerHTML = `<span class="codigo">${doc.codigo}</span> — ${doc.nombre} · Rev. actual <strong>${formatRev(doc.revisionActual)}</strong>`;
+  document.getElementById('revisar-fecha').value = HOY;
+  document.getElementById('revisar-usuario').value = doc.responsable || '';
+  document.getElementById('revisar-motivo').value = '';
+  document.querySelector('input[name="revisar-tipo"][value="sin-cambios"]').checked = true;
+  abrirOverlay('overlay-revisar');
+}
+document.getElementById('form-revisar').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const id = document.getElementById('revisar-doc-id').value;
+  const doc = state.documentos.find(d=>d.id===id);
+  if(!doc) return;
+  const tipo = document.querySelector('input[name="revisar-tipo"]:checked').value;
+  const fecha = document.getElementById('revisar-fecha').value || HOY;
+  const usuario = document.getElementById('revisar-usuario').value.trim();
+  const motivo = document.getElementById('revisar-motivo').value.trim();
+  if(tipo === 'con-cambios'){
+    doc.revisionActual = incrementarRevision(doc.revisionActual);
+  }
+  doc.fechaUltimaRevision = fecha;
+  doc.historial.push({rev: doc.revisionActual, fecha, motivo: (tipo==='con-cambios'?'[Con cambios] ':'[Sin cambios] ')+motivo, usuario});
+  logActividad(`Revisión registrada en <strong>${doc.codigo}</strong> (${tipo==='con-cambios'?'con cambios → Rev.'+formatRev(doc.revisionActual):'sin cambios'})`);
+  persistirDocumento(doc);
+  cerrarOverlay('overlay-revisar');
+  toast(`Revisión registrada para ${doc.codigo}.`);
+  renderAll();
+});
+
+/* ============================================================
+   RENDER: SUSPENSION
+============================================================ */
+function poblarSuspensionSelect(){
+  const sel = document.getElementById('susp-doc');
+  const disponibles = state.documentos.filter(d=>d.estado==='Vigente');
+  sel.innerHTML = disponibles.length ? disponibles.map(d=>`<option value="${d.id}">${d.codigo} — ${d.nombre}</option>`).join('') : '<option value="">No hay documentos vigentes disponibles</option>';
+}
+function renderSuspension(){
+  poblarSuspensionSelect();
+  const suspendidos = state.documentos.filter(d=>d.estado==='Suspendido');
+  const tbody = document.querySelector('#tbl-suspendidos tbody');
+  tbody.innerHTML = suspendidos.length ? suspendidos.map(d=>`
+    <tr>
+      <td class="codigo">${d.codigo}</td>
+      <td>${d.nombre}</td>
+      <td>${fmt(d.suspension?.fechaInicio)}</td>
+      <td>${d.suspension?.motivo||'—'}</td>
+      <td><button class="btn small" onclick="reactivarDocumento('${d.id}')">Reactivar</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="5">No hay documentos suspendidos.</td></tr>`;
+}
+document.getElementById('form-suspension').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const id = document.getElementById('susp-doc').value;
+  const doc = state.documentos.find(d=>d.id===id);
+  if(!doc){ toast('Selecciona un documento válido.'); return; }
+  doc.estado = 'Suspendido';
+  doc.suspension = {
+    fechaInicio: document.getElementById('susp-fecha').value || HOY,
+    motivo: document.getElementById('susp-motivo').value.trim(),
+    fechaReactivacionPrevista: document.getElementById('susp-reactivacion').value || null,
+  };
+  doc.historial.push({rev: doc.revisionActual, fecha: doc.suspension.fechaInicio, motivo: '[Suspensión] '+doc.suspension.motivo, usuario:''});
+  logActividad(`Documento <strong>${doc.codigo}</strong> suspendido`);
+  persistirDocumento(doc);
+  document.getElementById('form-suspension').reset();
+  document.getElementById('susp-fecha').value = HOY;
+  toast(`${doc.codigo} suspendido.`);
+  renderAll();
+});
+function reactivarDocumento(id){
+  const doc = state.documentos.find(d=>d.id===id);
+  if(!doc) return;
+  doc.estado = 'Vigente';
+  doc.historial.push({rev: doc.revisionActual, fecha: HOY, motivo: '[Reactivación] Documento reactivado tras suspensión', usuario:''});
+  doc.suspension = null;
+  logActividad(`Documento <strong>${doc.codigo}</strong> reactivado`);
+  persistirDocumento(doc);
+  toast(`${doc.codigo} reactivado.`);
+  renderAll();
+}
+
+/* ============================================================
+   RENDER: BAJA
+============================================================ */
+function poblarBajaSelects(){
+  const sel = document.getElementById('baja-doc');
+  const disponibles = state.documentos.filter(d=>d.estado==='Vigente' || d.estado==='Suspendido' || d.estado==='En Elaboración');
+  sel.innerHTML = disponibles.length ? disponibles.map(d=>`<option value="${d.id}">${d.codigo} — ${d.nombre}</option>`).join('') : '<option value="">No hay documentos disponibles</option>';
+
+  const selCat = document.getElementById('baja-categoria');
+  selCat.innerHTML = '<option value="">Selecciona una categoría...</option>' + CATEGORIAS_RETENCION.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('');
+}
+document.getElementById('baja-categoria').addEventListener('change', (e)=>{
+  const cat = CATEGORIAS_RETENCION.find(c=>c.id===e.target.value);
+  const box = document.getElementById('baja-retencion-info');
+  if(!cat){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML = `<div class="warn-box"><strong>Período de retención — IATF 16949:</strong> ${cat.iatf}<br><strong>Ford CQI-23:</strong> ${cat.cqi}<br><strong>Observación:</strong> ${cat.obs}</div>`;
+});
+function renderBaja(){
+  poblarBajaSelects();
+  document.getElementById('baja-retencion-info').style.display='none';
+  document.getElementById('baja-categoria').value='';
+  const bajas = state.documentos.filter(d=>d.estado==='Baja');
+  const tbody = document.querySelector('#tbl-bajas tbody');
+  tbody.innerHTML = bajas.length ? bajas.map(d=>`
+    <tr>
+      <td class="codigo">${d.codigo}</td>
+      <td>${d.nombre}</td>
+      <td>${fmt(d.baja?.fecha)}</td>
+      <td>${d.baja?.disposicion||'—'}</td>
+      <td><button class="btn small" onclick="abrirHistorial('${d.id}')">Ver detalle</button></td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="5">No hay documentos dados de baja.</td></tr>`;
+}
+document.getElementById('form-baja').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const id = document.getElementById('baja-doc').value;
+  const doc = state.documentos.find(d=>d.id===id);
+  if(!doc){ toast('Selecciona un documento válido.'); return; }
+  const cat = CATEGORIAS_RETENCION.find(c=>c.id===document.getElementById('baja-categoria').value);
+  doc.estado = 'Baja';
+  doc.baja = {
+    fecha: document.getElementById('baja-fecha').value || HOY,
+    motivo: document.getElementById('baja-motivo').value.trim(),
+    categoriaRetencion: cat ? cat.nombre : '',
+    disposicion: document.getElementById('baja-disposicion').value,
+    responsable: document.getElementById('baja-responsable').value.trim(),
+  };
+  doc.historial.push({rev: doc.revisionActual, fecha: doc.baja.fecha, motivo: `[Baja] ${doc.baja.motivo} — Disposición: ${doc.baja.disposicion}`, usuario: doc.baja.responsable});
+  logActividad(`Documento <strong>${doc.codigo}</strong> dado de baja (${doc.baja.disposicion})`);
+  persistirDocumento(doc);
+  document.getElementById('form-baja').reset();
+  document.getElementById('baja-fecha').value = HOY;
+  toast(`${doc.codigo} dado de baja.`);
+  renderAll();
+});
+
+/* ============================================================
+   HISTORIAL MODAL
+============================================================ */
+function abrirHistorial(id){
+  const doc = state.documentos.find(d=>d.id===id);
+  if(!doc) return;
+  document.getElementById('hist-modal-titulo').textContent = `Historial — ${doc.codigo}`;
+  document.getElementById('hist-modal-sub').textContent = doc.nombre;
+  const list = document.getElementById('hist-modal-list');
+  const items = [...doc.historial].reverse();
+  list.innerHTML = items.map(h=>`
+    <li><span class="rev-tag">Rev.${formatRev(h.rev)}</span><span class="rev-date">${fmt(h.fecha)}</span>${h.usuario?` · ${h.usuario}`:''}<br>${h.motivo}</li>
+  `).join('') || '<li>Sin historial registrado.</li>';
+  abrirOverlay('overlay-historial');
+}
+
+function abrirOverlay(id){ document.getElementById(id).classList.add('active'); }
+function cerrarOverlay(id){ document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('[data-close]').forEach(btn=>{
+  btn.addEventListener('click', ()=> cerrarOverlay(btn.dataset.close));
+});
+document.querySelectorAll('.overlay').forEach(ov=>{
+  ov.addEventListener('click', (e)=>{ if(e.target===ov) cerrarOverlay(ov.id); });
+});
+
+/* ============================================================
+   RENDER: RETENCION
+============================================================ */
+function renderRetencion(){
+  document.querySelector('#tbl-retencion tbody').innerHTML = CATEGORIAS_RETENCION.map(c=>`
+    <tr><td><strong>${c.nombre}</strong></td><td>${c.tipo}</td><td>${c.iatf}</td><td>${c.cqi}</td><td>${c.obs}</td></tr>
+  `).join('');
+}
+
+/* ============================================================
+   RENDER: AJUSTES
+============================================================ */
+function renderAjustes(){
+  document.getElementById('tbl-tipos').innerHTML = Object.entries(TIPOS).map(([k,v])=>`
+    <tr><td class="mono">${k}</td><td>${v.label}</td><td class="mono">${v.patron}</td></tr>
+  `).join('');
+
+  const grupos = {};
+  state.documentos.forEach(d=>{
+    const key = TIPOS_SIN_AREA.has(d.tipoDoc) ? ('—|'+d.tipoDoc) : (d.area+'|'+d.tipoDoc);
+    const m = d.codigo.match(/-(\d+)$/);
+    const n = m ? parseInt(m[1],10) : 0;
+    if(!grupos[key] || n > grupos[key]) grupos[key] = n;
+  });
+  const filas = Object.keys(grupos).sort().map(key=>{
+    const [area,tipo] = key.split('|');
+    const areaMostrar = area==='—' ? '<span class="hint">(sin área en el código)</span>' : area;
+    return `<tr><td>${areaMostrar}</td><td class="mono">${tipo}</td><td class="mono">${grupos[key]}</td><td class="mono">${sugerirCodigo(area==='—'?'':area,tipo)}</td></tr>`;
+  }).join('');
+  document.querySelector('#tbl-consecutivos tbody').innerHTML = filas || '<tr class="empty-row"><td colspan="4">Aún no hay documentos registrados.</td></tr>';
+
+  document.getElementById('cfg-ciclo').value = state.cicloDefault;
+}
+document.getElementById('btn-guardar-cfg').addEventListener('click', ()=>{
+  const v = parseInt(document.getElementById('cfg-ciclo').value,10);
+  if(v>0){ state.cicloDefault = v; save(); guardarConfigFirestore(); toast('Ajuste guardado.'); }
+});
+document.getElementById('btn-export-json').addEventListener('click', ()=>{
+  descargarArchivo('Respaldo_Control_Documentos_HPM.json', JSON.stringify(state,null,2), 'application/json');
+  toast('Respaldo exportado.');
+});
+document.getElementById('btn-import-json').addEventListener('click', ()=> document.getElementById('file-import-json').click());
+document.getElementById('file-import-json').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const data = JSON.parse(ev.target.result);
+      if(!data.documentos) throw new Error('Formato inválido');
+      state = data;
+      state.cicloDefault = state.cicloDefault || 12;
+      state.actividad = state.actividad || [];
+      save();
+      if(firebaseEnabled) migrarTodoAFirestore(false);
+      toast('Respaldo importado correctamente.');
+      renderAll();
+    }catch(err){
+      toast('No se pudo importar el archivo: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+});
+document.getElementById('btn-reset-data').addEventListener('click', ()=>{
+  if(confirm('Esto reemplazará todos los datos actuales por los datos de ejemplo iniciales. ¿Continuar?')){
+    state = seedData();
+    save();
+    if(firebaseEnabled) migrarTodoAFirestore(false);
+    toast('Datos restablecidos.');
+    renderAll();
+  }
+});
+document.getElementById('btn-sync-firebase').addEventListener('click', ()=>{
+  if(!firebaseEnabled){ toast('Firebase no está conectado. Revisa FIREBASE_CONFIG.'); return; }
+  if(confirm('Esto sobrescribirá en Firebase cualquier documento con el mismo código que exista localmente. ¿Continuar?')){
+    migrarTodoAFirestore(true);
+  }
+});
+
+/* ============================================================
+   TOAST
+============================================================ */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+}
+
+/* ============================================================
+   INIT
+============================================================ */
+function renderAll(){
+  renderDashboard();
+  renderLista();
+  poblarAltaSelects();
+  actualizarPreviewCodigo();
+  renderRevision();
+  renderSuspension();
+  renderBaja();
+  renderRetencion();
+  renderAjustes();
+}
+
+document.getElementById('alta-fecha').value = HOY;
+document.getElementById('susp-fecha').value = HOY;
+document.getElementById('baja-fecha').value = HOY;
+poblarAltaSelects();
+renderAll();
+initFirebase();
+</script>
+</body>
+</html>
